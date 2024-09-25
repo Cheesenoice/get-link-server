@@ -15,11 +15,18 @@ app.get("/", (req, res) => {
   res.json("Hello");
 });
 
+// Reuse axios instance with defaults for common settings
+const axiosInstance = axios.create({
+  baseURL: api,
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
+
+// Get Token
 const getToken = async (loginPayload) => {
   try {
-    const response = await axios.post(api + "/token", loginPayload, {
-      headers: { "Content-Type": "application/json" },
-    });
+    const response = await axiosInstance.post("/token", loginPayload);
     return response.data.token || null;
   } catch (error) {
     console.error("Error fetching token:", error.message);
@@ -27,9 +34,10 @@ const getToken = async (loginPayload) => {
   }
 };
 
+// Get Messages
 const getMessages = async (token) => {
   try {
-    const response = await axios.get(api + "/messages", {
+    const response = await axiosInstance.get("/messages", {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data;
@@ -39,9 +47,10 @@ const getMessages = async (token) => {
   }
 };
 
+// Get Message Details
 const getMessageDetails = async (messageId, token) => {
   try {
-    const response = await axios.get(api + `${messageId}`, {
+    const response = await axiosInstance.get(`${messageId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data;
@@ -51,44 +60,34 @@ const getMessageDetails = async (messageId, token) => {
   }
 };
 
+// Optimized extractLink function
 const extractLink = (messageData) => {
   const dataString = JSON.stringify(messageData);
 
-  if (
-    dataString.includes("Your temporary access code") ||
-    dataString.includes("Mã truy cập Netflix tạm thời của bạn")
-  ) {
-    let link =
-      dataString
-        .split("Get Code")[1]
-        ?.split("[")[1]
-        ?.split("]")[0]
-        .replace("\\", "") ||
-      dataString
-        .split("Nhận mã")[1]
-        ?.split("[")[1]
-        ?.split("]")[0]
-        .replace("\\", "");
+  const codePatterns = [
+    "Your temporary access code",
+    "Mã truy cập Netflix tạm thời của bạn",
+  ];
+
+  const matchedPattern = codePatterns.find((pattern) =>
+    dataString.includes(pattern)
+  );
+
+  if (matchedPattern) {
+    let link = dataString.split(matchedPattern)[1]?.match(/\[(.*?)\]/)?.[1];
     if (link) {
-      link = link.replace("u0026", "&").replace("&", "&");
-      return link;
+      return link.replace(/\\u0026/g, "&");
     }
   }
 
-  if (dataString.includes("update-primary-location")) {
-    const urlRegex = /https?:\/\/[^\s\]]+/g;
-    const urls = dataString.match(urlRegex);
-    const specificUrl = urls.find((url) =>
-      url.includes("update-primary-location")
-    );
-    if (specificUrl) {
-      return specificUrl;
-    }
-  }
-
-  return null;
+  const updatePattern = /https?:\/\/[^\s\]]+/g;
+  const updateLinks = dataString.match(updatePattern);
+  return (
+    updateLinks?.find((url) => url.includes("update-primary-location")) || null
+  );
 };
 
+// Route to get the link from message
 app.post("/get-link", async (req, res) => {
   const { email } = req.body;
   const password = process.env.PASSWORD;
@@ -97,14 +96,11 @@ app.post("/get-link", async (req, res) => {
     return res.status(400).json({ error: "Missing email or password" });
   }
 
-  const loginPayload = {
-    address: email,
-    password: password,
-  };
+  const loginPayload = { address: email, password };
 
   const token = await getToken(loginPayload);
   if (!token) {
-    return res.status(401).json({ error: "Sai mail" });
+    return res.status(401).json({ error: "Invalid email or password" });
   }
 
   const messages = await getMessages(token);
@@ -119,7 +115,7 @@ app.post("/get-link", async (req, res) => {
   if (link) {
     return res.json({ link });
   } else {
-    return res.status(404).json({ error: "Mail chưa về" });
+    return res.status(404).json({ error: "No link found in the message." });
   }
 });
 
