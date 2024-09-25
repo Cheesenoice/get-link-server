@@ -93,14 +93,16 @@ app.post("/get-link", async (req, res) => {
   const password = process.env.PASSWORD;
 
   if (!email || !password) {
-    return res.status(400).json({ error: "Missing email or password" });
+    return res.status(400).json({ error: "Nhập lại mail" });
   }
 
   const loginPayload = { address: email, password };
 
   const token = await getToken(loginPayload);
   if (!token) {
-    return res.status(401).json({ error: "Invalid email or password" });
+    return res
+      .status(401)
+      .json({ error: "Mail ko đúng hoặc ko thuộc dịch vụ bên mình" });
   }
 
   const messages = await getMessages(token);
@@ -115,7 +117,9 @@ app.post("/get-link", async (req, res) => {
   if (link) {
     return res.json({ link });
   } else {
-    return res.status(404).json({ error: "No link found in the message." });
+    return res.status(404).json({
+      error: "Mail chưa về, bạn làm lại theo thứ tự - Bấm Send mail trước nha.",
+    });
   }
 });
 
