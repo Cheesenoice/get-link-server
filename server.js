@@ -1,112 +1,57 @@
-// Replace express with native Fetch API and other built-in features
-addEventListener("fetch", (event) => {
-  event.respondWith(handleRequest(event.request));
+const express = require("express");
+const axios = require("axios");
+const cors = require("cors");
+require("dotenv").config();
+
+const app = express();
+const PORT = process.env.PORT || 8080;
+const api = process.env.API;
+
+app.use(cors());
+app.use(express.json());
+
+// Add the GET route to respond with "Hello"
+app.get("/", (req, res) => {
+  res.json("Hello");
 });
 
-async function handleRequest(request) {
-  const url = new URL(request.url);
-
-  // Check the route
-  if (url.pathname === "/") {
-    return new Response(JSON.stringify("Hello"), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  } else if (url.pathname === "/get-link" && request.method === "POST") {
-    const body = await request.json();
-    return await getLink(body);
-  }
-
-  return new Response("Not Found", { status: 404 });
-}
-
-async function getLink(body) {
-  const { email } = body;
-  const password = YOUR_PASSWORD_HERE; // Store your password securely
-
-  if (!email || !password) {
-    return new Response(
-      JSON.stringify({ error: "Missing email or password" }),
-      { status: 400, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
-  const token = await getToken({ address: email, password });
-  if (!token) {
-    return new Response(JSON.stringify({ error: "Sai mail" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  const messages = await getMessages(token);
-  if (!messages || messages["hydra:totalItems"] === 0) {
-    return new Response(JSON.stringify({ error: "No messages available." }), {
-      status: 404,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  const firstMessageId = messages["hydra:member"][0]["@id"];
-  const messageDetails = await getMessageDetails(firstMessageId, token);
-  const link = extractLink(messageDetails);
-
-  if (link) {
-    return new Response(JSON.stringify({ link }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  } else {
-    return new Response(JSON.stringify({ error: "Mail chưa về" }), {
-      status: 404,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-}
-
-async function getToken(loginPayload) {
-  const api = YOUR_API_URL_HERE; // Store your API URL securely
+const getToken = async (loginPayload) => {
   try {
-    const response = await fetch(`${api}/token`, {
-      method: "POST",
+    const response = await axios.post(api + "/token", loginPayload, {
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(loginPayload),
     });
-    const data = await response.json();
-    return data.token || null;
+    return response.data.token || null;
   } catch (error) {
     console.error("Error fetching token:", error.message);
     return null;
   }
-}
+};
 
-async function getMessages(token) {
-  const api = YOUR_API_URL_HERE;
+const getMessages = async (token) => {
   try {
-    const response = await fetch(`${api}/messages`, {
+    const response = await axios.get(api + "/messages", {
       headers: { Authorization: `Bearer ${token}` },
     });
-    return await response.json();
+    return response.data;
   } catch (error) {
     console.error("Error fetching messages:", error.message);
     return null;
   }
-}
+};
 
-async function getMessageDetails(messageId, token) {
-  const api = YOUR_API_URL_HERE;
+const getMessageDetails = async (messageId, token) => {
   try {
-    const response = await fetch(`${api}/${messageId}`, {
+    const response = await axios.get(api + `${messageId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    return await response.json();
+    return response.data;
   } catch (error) {
     console.error("Error fetching message details:", error.message);
     return null;
   }
-}
+};
 
-function extractLink(messageData) {
+const extractLink = (messageData) => {
   const dataString = JSON.stringify(messageData);
 
   if (
@@ -142,4 +87,42 @@ function extractLink(messageData) {
   }
 
   return null;
-}
+};
+
+app.post("/get-link", async (req, res) => {
+  const { email } = req.body;
+  const password = process.env.PASSWORD;
+
+  if (!email || !password) {
+    return res.status(400).json({ error: "Missing email or password" });
+  }
+
+  const loginPayload = {
+    address: email,
+    password: password,
+  };
+
+  const token = await getToken(loginPayload);
+  if (!token) {
+    return res.status(401).json({ error: "Sai mail" });
+  }
+
+  const messages = await getMessages(token);
+  if (!messages || messages["hydra:totalItems"] === 0) {
+    return res.status(404).json({ error: "No messages available." });
+  }
+
+  const firstMessageId = messages["hydra:member"][0]["@id"];
+  const messageDetails = await getMessageDetails(firstMessageId, token);
+
+  const link = extractLink(messageDetails);
+  if (link) {
+    return res.json({ link });
+  } else {
+    return res.status(404).json({ error: "Mail chưa về" });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
