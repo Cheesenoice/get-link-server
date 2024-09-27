@@ -10,12 +10,6 @@ const api = process.env.API;
 app.use(cors());
 app.use(express.json());
 
-// Add the GET route to respond with "Hello"
-app.get("/", (req, res) => {
-  res.json("Hello");
-});
-
-// Reuse axios instance with defaults for common settings
 const axiosInstance = axios.create({
   baseURL: api,
   headers: {
@@ -47,7 +41,6 @@ const getMessages = async (token) => {
   }
 };
 
-// Get Message Details
 const getMessageDetails = async (messageId, token) => {
   try {
     const response = await axiosInstance.get(`${messageId}`, {
@@ -60,11 +53,9 @@ const getMessageDetails = async (messageId, token) => {
   }
 };
 
-// Optimized extractLink function
 const extractLink = (messageData) => {
   const dataString = JSON.stringify(messageData);
 
-  // Check for access code patterns
   if (dataString.includes("travel/verify?nftoken")) {
     const urlRegex = /https?:\/\/[^\s\]]+/g;
     const urls = dataString.match(urlRegex);
@@ -76,7 +67,6 @@ const extractLink = (messageData) => {
     }
   }
 
-  // Check for update-primary-location URL
   if (dataString.includes("update-primary-location")) {
     const urlRegex = /https?:\/\/[^\s\]]+/g;
     const urls = dataString.match(urlRegex);
@@ -91,14 +81,9 @@ const extractLink = (messageData) => {
   return null;
 };
 
-// Route to get the link from message
 app.post("/get-link", async (req, res) => {
   const { email } = req.body;
   const password = process.env.PASSWORD;
-
-  if (!email || !password) {
-    return res.status(400).json({ error: "Nhập lại mail" });
-  }
 
   const loginPayload = { address: email, password };
 
