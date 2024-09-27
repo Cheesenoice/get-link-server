@@ -85,6 +85,10 @@ app.post("/get-link", async (req, res) => {
   const { email } = req.body;
   const password = process.env.PASSWORD;
 
+  if (!email || !password) {
+    return res.status(400).json({ error: "Vui lòng nhập mail" });
+  }
+
   const loginPayload = { address: email, password };
 
   const token = await getToken(loginPayload);
