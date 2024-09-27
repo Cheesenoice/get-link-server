@@ -64,27 +64,31 @@ const getMessageDetails = async (messageId, token) => {
 const extractLink = (messageData) => {
   const dataString = JSON.stringify(messageData);
 
-  const codePatterns = [
-    "Your temporary access code",
-    "Mã truy cập Netflix tạm thời của bạn",
-  ];
-
-  const matchedPattern = codePatterns.find((pattern) =>
-    dataString.includes(pattern)
-  );
-
-  if (matchedPattern) {
-    let link = dataString.split(matchedPattern)[1]?.match(/\[(.*?)\]/)?.[1];
-    if (link) {
-      return link.replace(/\\u0026/g, "&");
+  // Check for access code patterns
+  if (dataString.includes("travel/verify?nftoken")) {
+    const urlRegex = /https?:\/\/[^\s\]]+/g;
+    const urls = dataString.match(urlRegex);
+    const specificUrl = urls?.find((url) =>
+      url.includes("travel/verify?nftoken")
+    );
+    if (specificUrl) {
+      return specificUrl;
     }
   }
 
-  const updatePattern = /https?:\/\/[^\s\]]+/g;
-  const updateLinks = dataString.match(updatePattern);
-  return (
-    updateLinks?.find((url) => url.includes("update-primary-location")) || null
-  );
+  // Check for update-primary-location URL
+  if (dataString.includes("update-primary-location")) {
+    const urlRegex = /https?:\/\/[^\s\]]+/g;
+    const urls = dataString.match(urlRegex);
+    const specificUrl = urls?.find((url) =>
+      url.includes("update-primary-location")
+    );
+    if (specificUrl) {
+      return specificUrl;
+    }
+  }
+
+  return null;
 };
 
 // Route to get the link from message
