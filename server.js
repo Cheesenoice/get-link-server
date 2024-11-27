@@ -17,7 +17,7 @@ const axiosInstance = axios.create({
   },
 });
 
-// Get Token
+// Helper function to get a token
 const getToken = async (loginPayload) => {
   try {
     const response = await axiosInstance.post("/token", loginPayload);
@@ -28,7 +28,7 @@ const getToken = async (loginPayload) => {
   }
 };
 
-// Get Messages
+// Helper function to get messages
 const getMessages = async (token) => {
   try {
     const response = await axiosInstance.get("/messages", {
@@ -41,6 +41,7 @@ const getMessages = async (token) => {
   }
 };
 
+// Helper function to get message details
 const getMessageDetails = async (messageId, token) => {
   try {
     const response = await axiosInstance.get(`${messageId}`, {
@@ -53,34 +54,28 @@ const getMessageDetails = async (messageId, token) => {
   }
 };
 
-const extractLink = (messageData) => {
+// Helper function to extract the link
+const extractLink = (messageData, email) => {
   const dataString = JSON.stringify(messageData);
 
-  if (dataString.includes("travel/verify?nftoken")) {
+  if (
+    (dataString.includes("travel/verify?nftoken") ||
+      dataString.includes("update-primary-location")) &&
+    (email ? dataString.includes(email) : true)
+  ) {
     const urlRegex = /https?:\/\/[^\s\]]+/g;
     const urls = dataString.match(urlRegex);
-    const specificUrl = urls?.find((url) =>
-      url.includes("travel/verify?nftoken")
+    return urls?.find(
+      (url) =>
+        url.includes("travel/verify?nftoken") ||
+        url.includes("update-primary-location")
     );
-    if (specificUrl) {
-      return specificUrl;
-    }
-  }
-
-  if (dataString.includes("update-primary-location")) {
-    const urlRegex = /https?:\/\/[^\s\]]+/g;
-    const urls = dataString.match(urlRegex);
-    const specificUrl = urls?.find((url) =>
-      url.includes("update-primary-location")
-    );
-    if (specificUrl) {
-      return specificUrl;
-    }
   }
 
   return null;
 };
 
+// Route for the first logic (specific token-based email extraction)
 app.post("/get-link", async (req, res) => {
   const { email } = req.body;
   const password = process.env.PASSWORD;
@@ -90,12 +85,12 @@ app.post("/get-link", async (req, res) => {
   }
 
   const loginPayload = { address: email, password };
-
   const token = await getToken(loginPayload);
+
   if (!token) {
-    return res
-      .status(401)
-      .json({ error: "Mail ko đúng hoặc ko thuộc dịch vụ bên mình" });
+    return res.status(401).json({
+      error: "Mail ko đúng hoặc ko thuộc dịch vụ bên mình",
+    });
   }
 
   const messages = await getMessages(token);
@@ -103,17 +98,61 @@ app.post("/get-link", async (req, res) => {
     return res.status(404).json({ error: "No messages available." });
   }
 
-  const firstMessageId = messages["hydra:member"][0]["@id"];
-  const messageDetails = await getMessageDetails(firstMessageId, token);
+  const relevantMessages = messages["hydra:member"].slice(0, 3);
+  for (const message of relevantMessages) {
+    const messageId = message["@id"];
+    const messageDetails = await getMessageDetails(messageId, token);
 
-  const link = extractLink(messageDetails);
-  if (link) {
-    return res.json({ link });
-  } else {
-    return res.status(404).json({
-      error: "Mail chưa về, bạn làm lại theo thứ tự - Bấm Send mail trước nha.",
-    });
+    const link = extractLink(messageDetails);
+    if (link) {
+      return res.json({ link });
+    }
   }
+
+  return res.status(404).json({
+    error: "Mail chưa về, bạn làm lại theo thứ tự - Bấm Send mail trước nha.",
+  });
+});
+
+// Route for the second logic (general email extraction)
+app.post("/yandex-link", async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: "Vui lòng nhập mail" });
+  }
+
+  const loginPayload = {
+    address: process.env.EMAIL,
+    password: process.env.PASSWORD,
+  };
+
+  const token = await getToken(loginPayload);
+
+  if (!token) {
+    return res.status(500).json({ error: "Unable to retrieve token." });
+  }
+
+  const messages = await getMessages(token);
+  if (!messages || messages["hydra:totalItems"] === 0) {
+    return res.status(404).json({ error: "No messages available." });
+  }
+
+  const relevantMessages = messages["hydra:member"].slice(0, 3);
+  for (const message of relevantMessages) {
+    const messageId = message["@id"];
+    const messageDetails = await getMessageDetails(messageId, token);
+
+    const link = extractLink(messageDetails, email);
+    if (link) {
+      return res.json({ link });
+    }
+  }
+
+  return res.status(404).json({
+    error:
+      "Mail chưa về hoặc sai mail, bạn làm lại theo thứ tự - Bấm Send mail trước nha.",
+  });
 });
 
 app.listen(PORT, () => {
